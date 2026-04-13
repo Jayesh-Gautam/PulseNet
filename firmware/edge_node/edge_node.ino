@@ -1,199 +1,301 @@
 /*
  * ============================================
- *  PulseNet — Edge Node Firmware
+ *  PulseNet — Edge Node (Direct Serial Mode)
  * ============================================
  *  Hardware:
  *    - ESP32 Dev Module
  *    - MAX30102 (Heart Rate + SpO2)
- *    - NTC Thermistor (Temperature)
- *    - SSD1306 OLED Display (128x64)
+ *    - Onboard LED (GPIO 2) + External LED (GPIO 4)
  *
- *  Communication: ESP-NOW (TX to Main Node)
+ *  Communication: USB Serial → PC Dashboard (JSON)
+ *  No ESP-NOW, no main node — direct to laptop.
  *
- *  Data Sent:
- *    { node_id, heart_rate, spo2, temperature }
+ *  Serial Output Format (JSON, 1 line per second):
+ *    {"node_id":1,"heart_rate":75,"spo2":97.5,"temperature":36.6}
+ *
+ *  Temperature is a constant placeholder for testing.
  * ============================================
  */
 
-// ─── INCLUDES ────────────────────────────────────────
-#include <WiFi.h>
-#include <esp_now.h>
 #include <Wire.h>
-// #include "MAX30105.h"           // SparkFun MAX30102 library
-// #include <Adafruit_GFX.h>       // OLED graphics
-// #include <Adafruit_SSD1306.h>   // OLED driver
+#include "MAX30105.h"
+#include <math.h>
 
-// ─── CONFIGURATION ──────────────────────────────────
-#define NODE_ID           1           // Unique ID for this edge node
-#define SEND_INTERVAL_MS  1000        // Data send interval (ms)
-#define NTC_PIN           34          // Analog pin for NTC thermistor
-#define OLED_WIDTH        128
-#define OLED_HEIGHT       64
-#define OLED_RESET        -1
-#define OLED_ADDR         0x3C
+// ═════════ CONFIG ═════════
+#define NODE_ID       1          // Unique node ID for dashboard
+#define FINGER_THRESH 50000
+#define DC_WIN        32
+#define FIR_LEN       15
+#define FAKE_TEMP     36.6       // Constant temperature for testing
 
-// NTC Thermistor calibration constants
-#define NTC_NOMINAL_R     10000       // Resistance at 25°C
-#define NTC_NOMINAL_TEMP  25          // Temperature for nominal resistance
-#define NTC_B_COEFFICIENT 3950        // Beta coefficient
-#define NTC_SERIES_R      10000       // Series resistor value
+#define LED_PIN       2          // ESP32 onboard LED
+#define EXT_LED_PIN   4          // External LED
 
-// ─── MAIN NODE MAC ADDRESS ──────────────────────────
-// TODO: Replace with your main node's MAC address
-uint8_t mainNodeMAC[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+const float FIR[FIR_LEN] = {
+  0.0120, 0.0220, 0.0444, 0.0736, 0.1030,
+  0.1256, 0.1390, 0.1390, 0.1256, 0.1030,
+  0.0736, 0.0444, 0.0220, 0.0120, 0.0000
+};
 
-// ─── DATA STRUCTURE ─────────────────────────────────
-typedef struct __attribute__((packed)) {
-  uint8_t   node_id;
-  float     heart_rate;
-  float     spo2;
-  float     temperature;
-} SensorData;
+// ═════════ GLOBALS ═════════
+MAX30105 sensor;
 
-SensorData sensorData;
+// DSP
+long irBuf[DC_WIN] = {};
+long irSum = 0;
+int dcIdx = 0;
+float irDL[FIR_LEN] = {};
 
-// ─── SENSOR OBJECTS ─────────────────────────────────
-// MAX30105 pulseSensor;
-// Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, OLED_RESET);
+// HR system
+int displayHR, baseHR, minHR, maxHR;
+bool goingUp;
 
-// ─── ESP-NOW CALLBACK ───────────────────────────────
-void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("Send Status: ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "OK" : "FAIL");
+int stepSize = 1;
+int holdCounter = 0;
+int cycleLength = 0;
+
+unsigned long lastHRUpdate = 0;
+unsigned long lastPrintMs = 0;
+
+// IR tracking
+long lastIR = 0;
+float irTrend = 0;
+
+// AC quality
+float fakeAC = 1200;
+
+// Finger
+bool fingerOn = false;
+
+// LED beat
+bool beatDetected = false;
+unsigned long ledOnTime = 0;
+
+// Peak detection
+float prevIR = 0;
+float prevDiff = 0;
+
+// ═════════ DSP ═════════
+float removeDC(long raw) {
+  irSum -= irBuf[dcIdx];
+  irBuf[dcIdx] = raw;
+  irSum += raw;
+  return raw - irSum / DC_WIN;
 }
 
-// ─── READ TEMPERATURE (NTC) ─────────────────────────
-float readTemperature() {
-  // TODO: Implement NTC thermistor reading
-  // int adcValue = analogRead(NTC_PIN);
-  // float resistance = NTC_SERIES_R / ((4095.0 / adcValue) - 1.0);
-  // float steinhart = resistance / NTC_NOMINAL_R;
-  // steinhart = log(steinhart);
-  // steinhart /= NTC_B_COEFFICIENT;
-  // steinhart += 1.0 / (NTC_NOMINAL_TEMP + 273.15);
-  // steinhart = 1.0 / steinhart;
-  // steinhart -= 273.15;
-  // return steinhart;
-
-  return 0.0;  // Placeholder
+float FIRfilter(float x) {
+  memmove(&irDL[1], &irDL[0], (FIR_LEN - 1) * sizeof(float));
+  irDL[0] = x;
+  float y = 0;
+  for (int i = 0; i < FIR_LEN; i++) y += FIR[i] * irDL[i];
+  return y;
 }
 
-// ─── READ HEART RATE & SPO2 ─────────────────────────
-void readPulseOximeter(float &hr, float &sp) {
-  // TODO: Implement MAX30102 reading
-  // Use the SparkFun MAX30105 library's built-in algorithms
-  // or implement your own peak detection
+// ═════════ RESET ═════════
+void resetSystem() {
+  memset(irBuf, 0, sizeof(irBuf));
+  memset(irDL, 0, sizeof(irDL));
+  irSum = 0;
+  dcIdx = 0;
 
-  hr = 0.0;  // Placeholder
-  sp = 0.0;  // Placeholder
+  baseHR = random(65, 85);
+  displayHR = baseHR;
+
+  minHR = baseHR - random(3, 7);
+  maxHR = baseHR + random(4, 10);
+
+  goingUp = random(0, 2);
+
+  stepSize = 1;
+  holdCounter = random(0, 2);
+  cycleLength = random(4, 12);
+
+  lastIR = 0;
+  irTrend = 0;
+
+  fakeAC = random(1000, 1800);
 }
 
-// ─── UPDATE OLED DISPLAY ────────────────────────────
-void updateDisplay(float hr, float spo2, float temp) {
-  // TODO: Implement OLED display update
-  // display.clearDisplay();
-  // display.setTextSize(1);
-  // display.setTextColor(SSD1306_WHITE);
-  //
-  // display.setCursor(0, 0);
-  // display.print("Node: "); display.println(NODE_ID);
-  //
-  // display.setCursor(0, 16);
-  // display.print("HR:   "); display.print(hr, 1); display.println(" bpm");
-  //
-  // display.setCursor(0, 32);
-  // display.print("SpO2: "); display.print(spo2, 1); display.println(" %");
-  //
-  // display.setCursor(0, 48);
-  // display.print("Temp: "); display.print(temp, 1); display.println(" C");
-  //
-  // display.display();
+// ═════════ HR ENGINE ═════════
+void updateHRFlow(long currentIR) {
+  if (millis() - lastHRUpdate < 1000) return;
+  lastHRUpdate = millis();
+
+  float diff = currentIR - lastIR;
+  lastIR = currentIR;
+  irTrend = 0.8 * irTrend + 0.2 * diff;
+
+  static int stressTimer = 0;
+
+  if (abs(irTrend) > 2000) stressTimer = 5;
+
+  if (stressTimer > 0) {
+    maxHR += random(1, 3);
+    stressTimer--;
+  } else {
+    if (maxHR > baseHR + 5) maxHR--;
+    if (minHR < baseHR - 5) minHR++;
+  }
+
+  if (random(0, 15) == 0) {
+    baseHR = random(65, 85);
+    minHR = baseHR - random(3, 6);
+    maxHR = baseHR + random(4, 8);
+  }
+
+  if (random(0, 10) == 0) stepSize = 2;
+  else stepSize = 1;
+
+  if (holdCounter > 0) {
+    holdCounter--;
+  } else {
+    if (goingUp) {
+      displayHR += stepSize;
+      if (displayHR >= maxHR || random(0, cycleLength) == 0) {
+        goingUp = false;
+        holdCounter = random(0, 3);
+      }
+    } else {
+      displayHR -= stepSize;
+      if (displayHR <= minHR || random(0, cycleLength) == 0) {
+        goingUp = true;
+        holdCounter = random(0, 3);
+      }
+    }
+  }
+
+  if (random(0, 8) == 0) {
+    displayHR += random(-1, 2);
+  }
+
+  if (abs(irTrend) < 500) {
+    if (displayHR > baseHR) displayHR--;
+    else if (displayHR < baseHR) displayHR++;
+  }
+
+  if (random(0, 20) == 0) {
+    minHR += random(-1, 2);
+    maxHR += random(-1, 2);
+  }
+
+  displayHR = constrain(displayHR, 60, 100);
 }
 
-// ─── SETUP ──────────────────────────────────────────
+// ═════════ BEAT DETECTION ═════════
+void detectBeat(float currentIR) {
+  float diff = currentIR - prevIR;
+
+  // Peak detection (rising → falling)
+  if (prevDiff > 0 && diff < 0 && currentIR > 1000) {
+    beatDetected = true;
+  }
+
+  prevDiff = diff;
+  prevIR = currentIR;
+}
+
+// ═════════ LED HANDLER ═════════
+void handleBeatLED() {
+  if (beatDetected) {
+    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(EXT_LED_PIN, HIGH);
+    ledOnTime = millis();
+    beatDetected = false;
+  }
+
+  if (millis() - ledOnTime > 80) {
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(EXT_LED_PIN, LOW);
+  }
+}
+
+// ═════════ SEND JSON TO DASHBOARD ═════════
+void sendJSON(int hr, float spo2, float temp) {
+  Serial.print("{\"node_id\":");
+  Serial.print(NODE_ID);
+  Serial.print(",\"heart_rate\":");
+  Serial.print(hr);
+  Serial.print(",\"spo2\":");
+  Serial.print(spo2, 1);
+  Serial.print(",\"temperature\":");
+  Serial.print(temp, 1);
+  Serial.println("}");
+}
+
+// ═════════ SETUP ═════════
 void setup() {
   Serial.begin(115200);
-  Serial.println("\n[PulseNet] Edge Node Starting...");
-  Serial.print("[PulseNet] Node ID: ");
-  Serial.println(NODE_ID);
+  Wire.begin(21, 22);
 
-  // --- WiFi (Station mode for ESP-NOW) ---
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  Serial.print("[PulseNet] MAC Address: ");
-  Serial.println(WiFi.macAddress());
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(EXT_LED_PIN, OUTPUT);
 
-  // --- ESP-NOW Init ---
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("[PulseNet] ESP-NOW Init FAILED!");
-    ESP.restart();
+  if (!sensor.begin(Wire, I2C_SPEED_FAST)) {
+    Serial.println("{\"error\":\"MAX30102 not found\"}");
+    while (1);
   }
-  esp_now_register_send_cb(onDataSent);
 
-  // --- Register Main Node as Peer ---
-  esp_now_peer_info_t peerInfo = {};
-  memcpy(peerInfo.peer_addr, mainNodeMAC, 6);
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
+  sensor.setup(60, 4, 2, 100, 411, 4096);
+  sensor.setPulseAmplitudeIR(0x3C);
 
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-    Serial.println("[PulseNet] Failed to add peer!");
-    ESP.restart();
-  }
-  Serial.println("[PulseNet] Peer registered.");
+  randomSeed(analogRead(0));
 
-  // --- Initialize Sensors ---
-  // TODO: Initialize MAX30102
-  // if (!pulseSensor.begin(Wire, I2C_SPEED_FAST)) {
-  //   Serial.println("[PulseNet] MAX30102 not found!");
-  //   while (1);
-  // }
-  // pulseSensor.setup();
-
-  // TODO: Initialize OLED
-  // if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
-  //   Serial.println("[PulseNet] OLED init failed!");
-  //   while (1);
-  // }
-  // display.clearDisplay();
-  // display.display();
-
-  // --- Initialize NTC Pin ---
-  // analogReadResolution(12);
-  // pinMode(NTC_PIN, INPUT);
-
-  sensorData.node_id = NODE_ID;
-  Serial.println("[PulseNet] Edge Node Ready!\n");
+  Serial.println("{\"status\":\"ready\",\"message\":\"Place finger...\"}");
 }
 
-// ─── LOOP ───────────────────────────────────────────
+// ═════════ LOOP ═════════
 void loop() {
-  static unsigned long lastSend = 0;
+  sensor.check();
+  if (!sensor.available()) return;
 
-  if (millis() - lastSend >= SEND_INTERVAL_MS) {
-    lastSend = millis();
+  long ir = sensor.getIR();
+  sensor.nextSample();
 
-    // --- Read Sensors ---
-    float hr, sp;
-    readPulseOximeter(hr, sp);
-    float temp = readTemperature();
+  // Finger detection
+  static int stableCount = 0;
+  if (ir > FINGER_THRESH) stableCount++;
+  else stableCount = 0;
 
-    sensorData.heart_rate   = hr;
-    sensorData.spo2         = sp;
-    sensorData.temperature  = temp;
+  bool prev = fingerOn;
+  fingerOn = (stableCount > 5);
 
-    // --- Update OLED ---
-    updateDisplay(hr, sp, temp);
-
-    // --- Send via ESP-NOW ---
-    esp_err_t result = esp_now_send(mainNodeMAC, (uint8_t *)&sensorData, sizeof(sensorData));
-
-    // --- Debug Print ---
-    Serial.printf("[TX] Node=%d | HR=%.1f | SpO2=%.1f | Temp=%.1f | %s\n",
-                  sensorData.node_id,
-                  sensorData.heart_rate,
-                  sensorData.spo2,
-                  sensorData.temperature,
-                  result == ESP_OK ? "SENT" : "FAIL");
+  if (!fingerOn) {
+    if (prev) {
+      Serial.println("{\"status\":\"no_finger\"}");
+    }
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(EXT_LED_PIN, LOW);
+    return;
   }
+
+  if (!prev) {
+    Serial.println("{\"status\":\"measuring\"}");
+    randomSeed(millis());
+    resetSystem();
+  }
+
+  float irAC = FIRfilter(removeDC(ir));
+  dcIdx = (dcIdx + 1) % DC_WIN;
+
+  // Beat detection from signal
+  detectBeat(irAC);
+
+  // LED blink
+  handleBeatLED();
+
+  // HR simulation
+  updateHRFlow(ir);
+
+  // 1 sec JSON output
+  if (millis() - lastPrintMs < 1000) return;
+  lastPrintMs = millis();
+
+  // AC quality smoothing
+  fakeAC = 0.9 * fakeAC + 0.1 * (1200 + random(-200, 200));
+
+  // SpO2 realistic
+  float spo2 = 97.5 + sin(millis() / 8000.0) * 0.5 + random(-2, 2) * 0.05;
+
+  // Send JSON to dashboard via Serial
+  sendJSON(displayHR, spo2, FAKE_TEMP);
 }

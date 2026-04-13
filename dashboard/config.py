@@ -4,7 +4,7 @@ All thresholds, serial port settings, and app config live here.
 """
 
 # ─── SERIAL PORT ─────────────────────────────────────
-SERIAL_PORT = "COM3"          # Change to your ESP32 port (e.g., COM3, /dev/ttyUSB0)
+SERIAL_PORT = "COM7"          # ESP32 direct serial connection
 SERIAL_BAUD = 115200
 SERIAL_TIMEOUT = 1            # seconds
 
