@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PulseNet — Real-time patient vitals monitoring dashboard with ML anomaly detection">
+    <title>PulseNet — Patient Vitals Dashboard</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <!-- Dashboard Styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <!-- ─── HEADER ─────────────────────────────────── -->
+    <header id="app-header">
+        <div class="header-left">
+            <div class="logo">
+                <span class="logo-icon">🫀</span>
+                <h1>PulseNet</h1>
+            </div>
+            <span class="header-subtitle">Patient Vitals Monitoring</span>
+        </div>
+        <div class="header-right">
+            <div id="connection-status" class="status-badge disconnected">
+                <span class="status-dot"></span>
+                <span class="status-text">Disconnected</span>
+            </div>
+            <div id="ml-status" class="status-badge inactive">
+                <span class="status-dot"></span>
+                <span class="status-text">ML: Idle</span>
+            </div>
+            <div class="clock" id="clock"></div>
+        </div>
+    </header>
+
+    <!-- ─── MAIN CONTENT ──────────────────────────── -->
+    <main id="dashboard">
+
+        <!-- ─── STAT CARDS ─────────────────────────── -->
+        <section class="stat-cards" id="stat-cards">
+            <div class="stat-card heart-rate" id="card-hr">
+                <div class="stat-icon">❤️</div>
+                <div class="stat-info">
+                    <span class="stat-label">Heart Rate</span>
+                    <span class="stat-value" id="value-hr">--</span>
+                    <span class="stat-unit">BPM</span>
+                </div>
+                <div class="stat-range">Normal: 60–100</div>
+            </div>
+
+            <div class="stat-card spo2" id="card-spo2">
+                <div class="stat-icon">🩸</div>
+                <div class="stat-info">
+                    <span class="stat-label">SpO2</span>
+                    <span class="stat-value" id="value-spo2">--</span>
+                    <span class="stat-unit">%</span>
+                </div>
+                <div class="stat-range">Normal: 95–100</div>
+            </div>
+
+            <div class="stat-card temperature" id="card-temp">
+                <div class="stat-icon">🌡️</div>
+                <div class="stat-info">
+                    <span class="stat-label">Temperature</span>
+                    <span class="stat-value" id="value-temp">--</span>
+                    <span class="stat-unit">°C</span>
+                </div>
+                <div class="stat-range">Normal: 36.1–37.2</div>
+            </div>
+
+            <div class="stat-card anomaly" id="card-anomaly">
+                <div class="stat-icon">🤖</div>
+                <div class="stat-info">
+                    <span class="stat-label">ML Status</span>
+                    <span class="stat-value" id="value-anomaly">--</span>
+                    <span class="stat-unit" id="anomaly-confidence"></span>
+                </div>
+                <div class="stat-range" id="anomaly-score">Score: --</div>
+            </div>
+        </section>
+
+        <!-- ─── CHARTS ─────────────────────────────── -->
+        <section class="charts-grid" id="charts-section">
+            <div class="chart-container">
+                <h2 class="chart-title">Heart Rate <span class="chart-subtitle">Last 60 readings</span></h2>
+                <canvas id="chart-hr"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <h2 class="chart-title">SpO2 <span class="chart-subtitle">Last 60 readings</span></h2>
+                <canvas id="chart-spo2"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <h2 class="chart-title">Temperature <span class="chart-subtitle">Last 60 readings</span></h2>
+                <canvas id="chart-temp"></canvas>
+            </div>
+        </section>
+
+        <!-- ─── ALERTS LOG ─────────────────────────── -->
+        <section class="alerts-section" id="alerts-section">
+            <h2 class="section-title">
+                ⚠️ Alerts & Anomalies
+                <span class="alert-count" id="alert-count">0</span>
+            </h2>
+            <div class="alerts-list" id="alerts-list">
+                <div class="alert-placeholder">No alerts yet. Waiting for data...</div>
+            </div>
+        </section>
+
+        <!-- ─── STATS FOOTER ──────────────────────── -->
+        <section class="stats-footer" id="stats-footer">
+            <div class="footer-stat">
+                <span class="footer-label">Total Readings</span>
+                <span class="footer-value" id="stat-total">0</span>
+            </div>
+            <div class="footer-stat">
+                <span class="footer-label">Anomalies Detected</span>
+                <span class="footer-value" id="stat-anomalies">0</span>
+            </div>
+            <div class="footer-stat">
+                <span class="footer-label">Alerts Triggered</span>
+                <span class="footer-value" id="stat-alerts">0</span>
+            </div>
+            <div class="footer-stat">
+                <span class="footer-label">Active Nodes</span>
+                <span class="footer-value" id="stat-nodes">0</span>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Dashboard Script -->
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
