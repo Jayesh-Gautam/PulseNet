@@ -50,11 +50,11 @@
     --palette-grey-0: #FFFFFF;
 
     /* Theme Mapping */
-    --bg-primary: var(--palette-grey-0);
-    --bg-secondary: var(--palette-grey-10);
-    --bg-card: var(--palette-grey-10);
-    --bg-card-hover: var(--palette-grey-20);
-    --bg-elevated: var(--palette-grey-0);
+    --bg-primary: var(--palette-grey-10);
+    --bg-secondary: var(--palette-grey-20);
+    --bg-card: var(--palette-grey-20);
+    --bg-card-hover: var(--palette-grey-50);
+    --bg-elevated: var(--palette-grey-10);
 
     /* Text */
     --text-primary: var(--palette-grey-1200);
