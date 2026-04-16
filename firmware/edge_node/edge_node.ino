@@ -29,6 +29,7 @@
 #define LED_PIN             2
 #define EXT_LED_PIN         4
 #define BUZZER_PIN          5
+#define BTN_PIN 15   // Push button pin
 
 #define THERMISTOR          34
 #define SERIES_RESISTOR     10000
@@ -162,17 +163,40 @@ void checkAlertConditions(int hr, float spo2, float temp) {
 }
 
 void handleAlert() {
+  static bool buzzerStopped = false;
+
+  // ── Trigger alert ─────────────────────
   if (alertTriggered && !alertActive) {
     alertTriggered = false;
     alertActive    = true;
     alertStartTime = millis();
+    buzzerStopped  = false;
+
     digitalWrite(EXT_LED_PIN, HIGH);
     digitalWrite(BUZZER_PIN,  HIGH);
   }
-  if (alertActive && millis() - alertStartTime >= ALERT_DURATION) {
-    alertActive = false;
-    digitalWrite(EXT_LED_PIN, LOW);
-    digitalWrite(BUZZER_PIN,  LOW);
+
+  // ── If alert is active ─────────────────
+  if (alertActive) {
+
+    // 🔘 Check button press (LOW = pressed)
+    if (digitalRead(BTN_PIN) == LOW && !buzzerStopped) {
+      digitalWrite(BUZZER_PIN, LOW);
+      buzzerStopped = true;
+    }
+
+    // ⏱ Auto OFF after 1 second if not pressed
+    if (!buzzerStopped && millis() - alertStartTime >= 1000) {
+      digitalWrite(BUZZER_PIN, LOW);
+      buzzerStopped = true;
+    }
+
+    // 🔚 Fully stop alert after ALERT_DURATION (keep LED logic same)
+    if (millis() - alertStartTime >= ALERT_DURATION) {
+      alertActive = false;
+      digitalWrite(EXT_LED_PIN, LOW);
+      digitalWrite(BUZZER_PIN,  LOW);
+    }
   }
 }
 
@@ -499,6 +523,7 @@ void setup() {
   pinMode(EXT_LED_PIN, OUTPUT);
   pinMode(BUZZER_PIN,  OUTPUT);
   pinMode(THERMISTOR,  INPUT);
+  pinMode(BTN_PIN, INPUT_PULLUP);
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
     Serial.println(F("{\"error\":\"OLED not found\"}"));
