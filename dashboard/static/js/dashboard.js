@@ -1,6 +1,6 @@
 /**
  * PulseNet Dashboard — Frontend Logic
- * Handles WebSocket connection, real-time chart updates, and alerts.
+ * Updated for Antigravity Premium Dark UI
  */
 
 // ─── CONFIG ─────────────────────────────────────────
@@ -28,13 +28,15 @@ const chartOptions = (label, color, min, max) => ({
     plugins: {
         legend: { display: false },
         tooltip: {
-            backgroundColor: '#1a1f2e',
-            titleColor: '#f1f5f9',
-            bodyColor: '#94a3b8',
-            borderColor: '#2d3748',
+            backgroundColor: '#212226',
+            titleColor: '#FFFFFF',
+            bodyColor: '#B7BFD9',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
             borderWidth: 1,
-            cornerRadius: 8,
-            padding: 10,
+            cornerRadius: 12,
+            padding: 12,
+            titleFont: { family: 'Google Sans Flex', size: 14, weight: '500' },
+            bodyFont: { family: 'Google Sans Flex', size: 13 },
         },
     },
     scales: {
@@ -45,30 +47,36 @@ const chartOptions = (label, color, min, max) => ({
             min: min,
             max: max,
             grid: {
-                color: '#1e293b',
+                color: 'rgba(255, 255, 255, 0.05)',
                 drawBorder: false,
             },
             ticks: {
-                color: '#64748b',
-                font: { size: 11, family: 'Inter' },
-                padding: 8,
+                color: '#B7BFD9',
+                font: { size: 12, family: 'Google Sans Flex' },
+                padding: 10,
             },
         },
     },
     elements: {
         line: {
             tension: 0.4,
-            borderWidth: 2,
+            borderWidth: 3,
             borderColor: color,
             fill: true,
-            backgroundColor: color + '15',
+            backgroundColor: (context) => {
+                const ctx = context.chart.ctx;
+                const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                gradient.addColorStop(0, color + '60'); // 40% opacity
+                gradient.addColorStop(1, color + '00'); // 0% opacity
+                return gradient;
+            },
         },
         point: {
             radius: 0,
-            hoverRadius: 5,
-            hoverBackgroundColor: color,
-            hoverBorderColor: '#fff',
-            hoverBorderWidth: 2,
+            hoverRadius: 6,
+            hoverBackgroundColor: '#ffffff',
+            hoverBorderColor: color,
+            hoverBorderWidth: 3,
         },
     },
 });
@@ -80,7 +88,7 @@ const hrChart = new Chart(document.getElementById('chart-hr'), {
         labels: chartData.labels,
         datasets: [{ data: chartData.hr }],
     },
-    options: chartOptions('Heart Rate', '#ef4444', 40, 140),
+    options: chartOptions('Heart Rate', '#FC413D', 40, 140),
 });
 
 const spo2Chart = new Chart(document.getElementById('chart-spo2'), {
@@ -89,7 +97,7 @@ const spo2Chart = new Chart(document.getElementById('chart-spo2'), {
         labels: chartData.labels,
         datasets: [{ data: chartData.spo2 }],
     },
-    options: chartOptions('SpO2', '#3b82f6', 80, 105),
+    options: chartOptions('SpO2', '#3186FF', 80, 105),
 });
 
 const tempChart = new Chart(document.getElementById('chart-temp'), {
@@ -98,7 +106,7 @@ const tempChart = new Chart(document.getElementById('chart-temp'), {
         labels: chartData.labels,
         datasets: [{ data: chartData.temp }],
     },
-    options: chartOptions('Temperature', '#f59e0b', 34, 40),
+    options: chartOptions('Temperature', '#FBBC04', 20, 50),
 });
 
 // ─── UPDATE CHARTS ──────────────────────────────────
@@ -143,12 +151,12 @@ function updateStatCards(data) {
     const tempEl = document.getElementById('value-temp');
     tempEl.textContent = data.temperature.toFixed(1);
     const tempCard = document.getElementById('card-temp');
-    tempCard.classList.toggle('alert', data.temperature < 35 || data.temperature > 38.5);
+    tempCard.classList.toggle('alert', data.temperature > 37.2);
 
     // ML Anomaly
     if (data.ml) {
         const anomalyEl = document.getElementById('value-anomaly');
-        anomalyEl.textContent = data.ml.is_anomaly ? '⚠ ANOMALY' : '✓ Normal';
+        anomalyEl.textContent = data.ml.is_anomaly ? 'ANOMALY' : 'Normal';
         document.getElementById('anomaly-confidence').textContent =
             data.ml.confidence !== 'none' ? `Confidence: ${data.ml.confidence}` : '';
         document.getElementById('anomaly-score').textContent =
@@ -173,7 +181,12 @@ function addAlert(timestamp, nodeId, message, isMl = false) {
 
     const alertEl = document.createElement('div');
     alertEl.className = `alert-item${isMl ? ' ml-alert' : ''}`;
+    
+    // Instead of emoji, use Google Symbols for ML
+    const iconSpan = `<span class="google-symbols" aria-hidden="true">${isMl ? 'robot_2' : 'sensors'}</span>`;
+    
     alertEl.innerHTML = `
+        ${iconSpan}
         <span class="alert-time">${time}</span>
         <span class="alert-node">Node ${nodeId}</span>
         <span class="alert-message">${message}</span>
@@ -221,7 +234,7 @@ function connectWebSocket() {
                     data.alerts.forEach(msg => addAlert(data.timestamp, data.node_id, msg));
                 }
                 if (data.ml && data.ml.is_anomaly) {
-                    addAlert(data.timestamp, data.node_id, `🤖 ML: ${data.ml.message} (score: ${data.ml.anomaly_score})`, true);
+                    addAlert(data.timestamp, data.node_id, `ML: ${data.ml.message} (score: ${data.ml.anomaly_score})`, true);
                 }
             }
         } catch (e) {
@@ -243,16 +256,7 @@ function connectWebSocket() {
 
 // ─── CONNECTION STATUS ──────────────────────────────
 function setConnectionStatus(connected) {
-    const badge = document.getElementById('connection-status');
-    const text = badge.querySelector('.status-text');
-
-    if (connected) {
-        badge.className = 'status-badge connected';
-        text.textContent = 'Connected';
-    } else {
-        badge.className = 'status-badge disconnected';
-        text.textContent = 'Disconnected';
-    }
+    // Disabled connection status UI
 }
 
 // ─── CLOCK ──────────────────────────────────────────
@@ -297,5 +301,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     connectWebSocket();
 
-    console.log('🫀 PulseNet Dashboard loaded');
+    console.log('PulseNet Dashboard loaded');
 });

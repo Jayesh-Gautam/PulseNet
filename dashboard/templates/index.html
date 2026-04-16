@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="PulseNet — Real-time patient vitals monitoring dashboard with ML anomaly detection">
-    <title>PulseNet — Patient Vitals Dashboard</title>
+    <meta name="description" content="PulseNet — Real-time patient vitals monitoring dashboard with Google Antigravity aesthetic">
+    <title>PulseNet Dashboard</title>
 
-    <!-- Google Fonts -->
+    <!-- Google Fonts & Symbols -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex&display=swap" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Google+Symbols:opsz,wght,FILL,GRAD,ROND@40..48,300,0..1,0,50&display=block">
 
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -23,16 +24,12 @@
     <header id="app-header">
         <div class="header-left">
             <div class="logo">
-                <span class="logo-icon">🫀</span>
+                <span class="google-symbols logo-icon" aria-hidden="true">monitor_heart</span>
                 <h1>PulseNet</h1>
             </div>
             <span class="header-subtitle">Patient Vitals Monitoring</span>
         </div>
         <div class="header-right">
-            <div id="connection-status" class="status-badge disconnected">
-                <span class="status-dot"></span>
-                <span class="status-text">Disconnected</span>
-            </div>
             <div id="ml-status" class="status-badge inactive">
                 <span class="status-dot"></span>
                 <span class="status-text">ML: Idle</span>
@@ -47,7 +44,9 @@
         <!-- ─── STAT CARDS ─────────────────────────── -->
         <section class="stat-cards" id="stat-cards">
             <div class="stat-card heart-rate" id="card-hr">
-                <div class="stat-icon">❤️</div>
+                <div class="stat-icon">
+                    <span class="google-symbols" aria-hidden="true">favorite</span>
+                </div>
                 <div class="stat-info">
                     <span class="stat-label">Heart Rate</span>
                     <span class="stat-value" id="value-hr">--</span>
@@ -57,7 +56,9 @@
             </div>
 
             <div class="stat-card spo2" id="card-spo2">
-                <div class="stat-icon">🩸</div>
+                <div class="stat-icon">
+                    <span class="google-symbols" aria-hidden="true">water_drop</span>
+                </div>
                 <div class="stat-info">
                     <span class="stat-label">SpO2</span>
                     <span class="stat-value" id="value-spo2">--</span>
@@ -67,21 +68,25 @@
             </div>
 
             <div class="stat-card temperature" id="card-temp">
-                <div class="stat-icon">🌡️</div>
+                <div class="stat-icon">
+                    <span class="google-symbols" aria-hidden="true">device_thermostat</span>
+                </div>
                 <div class="stat-info">
                     <span class="stat-label">Temperature</span>
                     <span class="stat-value" id="value-temp">--</span>
                     <span class="stat-unit">°C</span>
                 </div>
-                <div class="stat-range">Normal: 36.1–37.2</div>
+                <div class="stat-range">Normal: < 37.2</div>
             </div>
 
             <div class="stat-card anomaly" id="card-anomaly">
-                <div class="stat-icon">🤖</div>
+                <div class="stat-icon">
+                    <span class="google-symbols" aria-hidden="true">smart_toy</span>
+                </div>
                 <div class="stat-info">
                     <span class="stat-label">ML Status</span>
-                    <span class="stat-value" id="value-anomaly">--</span>
-                    <span class="stat-unit" id="anomaly-confidence"></span>
+                    <span class="stat-value" id="value-anomaly" style="font-size: 24px;">--</span>
+                    <span class="stat-unit" id="anomaly-confidence" style="width: 100%; display: block; padding-top: 4px;"></span>
                 </div>
                 <div class="stat-range" id="anomaly-score">Score: --</div>
             </div>
@@ -90,17 +95,17 @@
         <!-- ─── CHARTS ─────────────────────────────── -->
         <section class="charts-grid" id="charts-section">
             <div class="chart-container">
-                <h2 class="chart-title">Heart Rate <span class="chart-subtitle">Last 60 readings</span></h2>
+                <h2 class="chart-title"><span class="google-symbols" aria-hidden="true" style="color: var(--accent-heart);">favorite</span> Heart Rate <span class="chart-subtitle">Last 60 readings</span></h2>
                 <canvas id="chart-hr"></canvas>
             </div>
 
             <div class="chart-container">
-                <h2 class="chart-title">SpO2 <span class="chart-subtitle">Last 60 readings</span></h2>
+                <h2 class="chart-title"><span class="google-symbols" aria-hidden="true" style="color: var(--accent-spo2);">water_drop</span> SpO2 <span class="chart-subtitle">Last 60 readings</span></h2>
                 <canvas id="chart-spo2"></canvas>
             </div>
 
             <div class="chart-container">
-                <h2 class="chart-title">Temperature <span class="chart-subtitle">Last 60 readings</span></h2>
+                <h2 class="chart-title"><span class="google-symbols" aria-hidden="true" style="color: var(--accent-temp);">device_thermostat</span> Temperature <span class="chart-subtitle">Last 60 readings</span></h2>
                 <canvas id="chart-temp"></canvas>
             </div>
         </section>
@@ -108,7 +113,7 @@
         <!-- ─── ALERTS LOG ─────────────────────────── -->
         <section class="alerts-section" id="alerts-section">
             <h2 class="section-title">
-                ⚠️ Alerts & Anomalies
+                <span class="google-symbols" aria-hidden="true" style="font-variation-settings: 'FILL' 1;">warning</span> Alerts & Anomalies
                 <span class="alert-count" id="alert-count">0</span>
             </h2>
             <div class="alerts-list" id="alerts-list">

@@ -16,8 +16,8 @@ env/
 *.sqlite3
 
 # ML Models
-dashboard/models/*.pkl
-dashboard/models/*.joblib
+# dashboard/models/*.pkl
+# dashboard/models/*.joblib
 
 # IDE
 .vscode/

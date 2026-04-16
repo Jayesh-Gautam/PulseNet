@@ -97,7 +97,7 @@ class MLEngine:
         prediction = self.model.predict(X)[0]       # 1 = normal, -1 = anomaly
         score = self.model.score_samples(X)[0]       # anomaly score
 
-        is_anomaly = prediction == -1
+        is_anomaly = bool(prediction == -1)
 
         # Determine confidence level based on score
         if score < -0.5:

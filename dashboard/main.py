@@ -25,19 +25,22 @@ db = Database()
 serial_reader = SerialReader()
 ml_engine = MLEngine()
 connected_clients: list[WebSocket] = []
+loop: asyncio.AbstractEventLoop = None  # Store event loop reference
 
 
 # ─── WEBSOCKET BROADCAST ────────────────────────────
 async def broadcast(data: dict):
     """Send data to all connected WebSocket clients."""
     disconnected = []
-    for ws in connected_clients:
+    for ws in list(connected_clients):
         try:
             await ws.send_json(data)
-        except Exception:
+        except Exception as e:
+            print(f"[WS] Broadcast error: {e}")
             disconnected.append(ws)
     for ws in disconnected:
-        connected_clients.remove(ws)
+        if ws in connected_clients:
+            connected_clients.remove(ws)
 
 
 # ─── SERIAL DATA CALLBACK ───────────────────────────
@@ -87,8 +90,9 @@ def on_serial_data(data: dict):
         "alerts": alerts,
     }
 
-    # --- Broadcast to all WebSocket clients ---
-    asyncio.run(broadcast(payload))
+    # --- Broadcast to all WebSocket clients (thread-safe) ---
+    if loop:
+        asyncio.run_coroutine_threadsafe(broadcast(payload), loop)
 
     # --- Retrain ML if enough new data ---
     stats = db.get_stats()
@@ -101,6 +105,9 @@ def on_serial_data(data: dict):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start serial reader on startup, stop on shutdown."""
+    global loop
+    loop = asyncio.get_running_loop()
+
     serial_reader.set_callback(on_serial_data)
     serial_reader.start()
 
@@ -133,10 +140,7 @@ templates = Jinja2Templates(directory="templates")
 @app.get("/")
 async def dashboard(request: Request):
     """Serve the main dashboard page."""
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "thresholds": THRESHOLDS,
-    })
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/api/vitals")

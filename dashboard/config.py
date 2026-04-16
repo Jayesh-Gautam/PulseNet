@@ -15,7 +15,7 @@ DB_PATH = "pulsenet.db"
 THRESHOLDS = {
     "heart_rate": {"low": 50.0, "high": 120.0, "unit": "BPM"},
     "spo2":       {"low": 90.0, "high": 100.0, "unit": "%"},
-    "temperature":{"low": 35.0, "high": 38.5,  "unit": "°C"},
+    "temperature":{"low": 10.0, "high": 37.2,  "unit": "°C"},
 }
 
 # ─── ML ENGINE ───────────────────────────────────────
