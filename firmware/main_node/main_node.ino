@@ -1,166 +1,73 @@
-/*
+/* 
  * ============================================
- *  PulseNet — Main Node Firmware
+ * PulseNet — Main Node (ESP B)
  * ============================================
- *  Hardware:
- *    - ESP32 Dev Module
- *    - Passive Buzzer (alarm)
- *
- *  Communication:
- *    - ESP-NOW (RX from Edge Nodes)
- *    - USB Serial (TX to Dashboard on PC)
- *
- *  Receives:
- *    { node_id, heart_rate, spo2, temperature }
- *
- *  Serial Output Format (JSON):
- *    {"node_id":1,"heart_rate":72.5,"spo2":98.0,"temperature":36.8}
+ * Hardware:
+ * - ESP32 Dev Module
+ * Communication: ESP-NOW receive from ESP A
+ * Output: Serial Monitor (JSON)
  * ============================================
  */
 
-// ─── INCLUDES ────────────────────────────────────────
-#include <WiFi.h>
 #include <esp_now.h>
-#include <ArduinoJson.h>  // Install: ArduinoJson by Benoit Blanchon
+#include <WiFi.h>
 
-// ─── CONFIGURATION ──────────────────────────────────
-#define BUZZER_PIN        25          // GPIO pin for buzzer
-#define ALARM_DURATION_MS 3000        // Buzzer alarm duration (ms)
-#define ALARM_FREQ        2000        // Buzzer tone frequency (Hz)
-#define SERIAL_BAUD       115200      // Serial baud rate
+// ═════════ PACKET STRUCTURE ═════════
+// must exactly match ESP A's struct
+typedef struct vitals_packet {
+  int node_id;
+  int heart_rate;
+  float spo2;
+  float temperature;
+  bool alert_active;
+} vitals_packet;
 
-// ─── VITAL SIGN THRESHOLDS ──────────────────────────
-#define HR_LOW            50.0        // Heart rate low threshold (BPM)
-#define HR_HIGH           120.0       // Heart rate high threshold (BPM)
-#define SPO2_LOW          90.0        // SpO2 low threshold (%)
-#define TEMP_LOW          35.0        // Temperature low threshold (°C)
-#define TEMP_HIGH         38.5        // Temperature high threshold (°C)
+vitals_packet inPacket;
 
-// ─── DATA STRUCTURE (must match edge node) ──────────
-typedef struct __attribute__((packed)) {
-  uint8_t   node_id;
-  float     heart_rate;
-  float     spo2;
-  float     temperature;
-} SensorData;
+// ═════════ CALLBACK — fires on every received packet ═════════
+void onDataReceive(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
 
-// ─── STATE ──────────────────────────────────────────
-volatile bool newDataReceived = false;
-SensorData    latestData;
-unsigned long alarmStartTime  = 0;
-bool          alarmActive     = false;
+  if (len != sizeof(vitals_packet)) return; // wrong packet size, ignore
 
-// ─── CHECK THRESHOLDS & TRIGGER ALARM ───────────────
-bool checkVitals(const SensorData &data) {
-  bool abnormal = false;
+  memcpy(&inPacket, data, sizeof(inPacket));
 
-  if (data.heart_rate < HR_LOW || data.heart_rate > HR_HIGH) {
-    Serial.printf("[ALERT] Node %d: Abnormal Heart Rate = %.1f BPM\n",
-                  data.node_id, data.heart_rate);
-    abnormal = true;
-  }
+  // print as JSON to Serial Monitor
+  Serial.print("{\"node_id\":");
+  Serial.print(inPacket.node_id);
 
-  if (data.spo2 < SPO2_LOW) {
-    Serial.printf("[ALERT] Node %d: Low SpO2 = %.1f%%\n",
-                  data.node_id, data.spo2);
-    abnormal = true;
-  }
+  Serial.print(",\"heart_rate\":");
+  Serial.print(inPacket.heart_rate);
 
-  if (data.temperature < TEMP_LOW || data.temperature > TEMP_HIGH) {
-    Serial.printf("[ALERT] Node %d: Abnormal Temperature = %.1f°C\n",
-                  data.node_id, data.temperature);
-    abnormal = true;
-  }
+  Serial.print(",\"spo2\":");
+  Serial.print(inPacket.spo2, 1);
 
-  return abnormal;
+  Serial.print(",\"temperature\":");
+  Serial.print(inPacket.temperature, 1);
+
+  Serial.print(",\"alert\":");
+  Serial.print(inPacket.alert_active ? "true" : "false");
+
+  Serial.println("}");
 }
 
-// ─── BUZZER ALARM ───────────────────────────────────
-void triggerAlarm() {
-  // TODO: Implement buzzer alarm pattern
-  // tone(BUZZER_PIN, ALARM_FREQ);
-  alarmActive = true;
-  alarmStartTime = millis();
-  Serial.println("[ALARM] Buzzer activated!");
-}
-
-void stopAlarm() {
-  // noTone(BUZZER_PIN);
-  alarmActive = false;
-  Serial.println("[ALARM] Buzzer deactivated.");
-}
-
-// ─── SEND DATA TO PC VIA SERIAL (JSON) ─────────────
-void sendToPC(const SensorData &data) {
-  StaticJsonDocument<256> doc;
-  doc["node_id"]     = data.node_id;
-  doc["heart_rate"]  = round(data.heart_rate * 10.0) / 10.0;
-  doc["spo2"]        = round(data.spo2 * 10.0) / 10.0;
-  doc["temperature"] = round(data.temperature * 10.0) / 10.0;
-
-  serializeJson(doc, Serial);
-  Serial.println();  // Newline delimiter for PC-side parsing
-}
-
-// ─── ESP-NOW RECEIVE CALLBACK ───────────────────────
-void onDataReceived(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-  if (len == sizeof(SensorData)) {
-    memcpy(&latestData, data, sizeof(SensorData));
-    newDataReceived = true;
-  } else {
-    Serial.printf("[ERR] Unexpected payload size: %d (expected %d)\n",
-                  len, sizeof(SensorData));
-  }
-}
-
-// ─── SETUP ──────────────────────────────────────────
+// ═════════ SETUP ═════════
 void setup() {
-  Serial.begin(SERIAL_BAUD);
-  Serial.println("\n[PulseNet] Main Node Starting...");
 
-  // --- Buzzer Pin ---
-  pinMode(BUZZER_PIN, OUTPUT);
-  digitalWrite(BUZZER_PIN, LOW);
+  Serial.begin(115200);
 
-  // --- WiFi (Station mode for ESP-NOW) ---
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  Serial.print("[PulseNet] MAC Address: ");
-  Serial.println(WiFi.macAddress());
 
-  // --- ESP-NOW Init ---
   if (esp_now_init() != ESP_OK) {
-    Serial.println("[PulseNet] ESP-NOW Init FAILED!");
-    ESP.restart();
+    Serial.println("{\"error\":\"ESP-NOW init failed\"}");
+    while (1);
   }
-  esp_now_register_recv_cb(onDataReceived);
 
-  Serial.println("[PulseNet] Main Node Ready! Waiting for data...\n");
+  esp_now_register_recv_cb(onDataReceive);
+
+  Serial.println("{\"status\":\"ready\",\"message\":\"Waiting for ESP A...\"}");
 }
 
-// ─── LOOP ───────────────────────────────────────────
+// ═════════ LOOP ═════════
 void loop() {
-  // --- Process received data ---
-  if (newDataReceived) {
-    newDataReceived = false;
-
-    Serial.printf("[RX] Node=%d | HR=%.1f | SpO2=%.1f | Temp=%.1f\n",
-                  latestData.node_id,
-                  latestData.heart_rate,
-                  latestData.spo2,
-                  latestData.temperature);
-
-    // Send JSON to PC via Serial
-    sendToPC(latestData);
-
-    // Check thresholds and alarm
-    if (checkVitals(latestData)) {
-      triggerAlarm();
-    }
-  }
-
-  // --- Auto-stop alarm after duration ---
-  if (alarmActive && (millis() - alarmStartTime >= ALARM_DURATION_MS)) {
-    stopAlarm();
-  }
+  // nothing here — all work done in onDataReceive callback
 }
