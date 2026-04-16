@@ -106,7 +106,7 @@ const tempChart = new Chart(document.getElementById('chart-temp'), {
         labels: chartData.labels,
         datasets: [{ data: chartData.temp }],
     },
-    options: chartOptions('Temperature', '#FBBC04', 20, 50),
+    options: chartOptions('Temperature', '#FBBC04', 20, 40),
 });
 
 // ─── UPDATE CHARTS ──────────────────────────────────
