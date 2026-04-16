@@ -50,16 +50,16 @@
     --palette-grey-0: #FFFFFF;
 
     /* Theme Mapping */
-    --bg-primary: var(--palette-grey-1200);
-    --bg-secondary: var(--palette-grey-1100);
-    --bg-card: rgba(33, 34, 38, 0.4);
-    --bg-card-hover: rgba(33, 34, 38, 0.7);
-    --bg-elevated: var(--palette-grey-1100);
+    --bg-primary: var(--palette-grey-0);
+    --bg-secondary: var(--palette-grey-10);
+    --bg-card: var(--palette-grey-10);
+    --bg-card-hover: var(--palette-grey-20);
+    --bg-elevated: var(--palette-grey-0);
 
     /* Text */
-    --text-primary: var(--palette-grey-0);
-    --text-secondary: var(--palette-grey-400);
-    --text-muted: var(--palette-grey-800);
+    --text-primary: var(--palette-grey-1200);
+    --text-secondary: var(--palette-grey-800);
+    --text-muted: var(--palette-grey-400);
 
     /* Google Accent Colors */
     --accent-heart: #FC413D;
@@ -130,7 +130,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 24px 48px;
-    background: rgba(18, 19, 23, 0.85);
+    background: rgba(255, 255, 255, 0.85);
     border-bottom: 1px solid var(--border-subtle);
     position: sticky;
     top: 0;

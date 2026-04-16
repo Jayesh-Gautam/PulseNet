@@ -28,10 +28,10 @@ const chartOptions = (label, color, min, max) => ({
     plugins: {
         legend: { display: false },
         tooltip: {
-            backgroundColor: '#212226',
-            titleColor: '#FFFFFF',
-            bodyColor: '#B7BFD9',
-            borderColor: 'rgba(255, 255, 255, 0.1)',
+            backgroundColor: '#ffffff',
+            titleColor: '#121317',
+            bodyColor: '#45474D',
+            borderColor: 'rgba(18, 19, 23, 0.1)',
             borderWidth: 1,
             cornerRadius: 12,
             padding: 12,
@@ -47,11 +47,11 @@ const chartOptions = (label, color, min, max) => ({
             min: min,
             max: max,
             grid: {
-                color: 'rgba(255, 255, 255, 0.05)',
+                color: 'rgba(18, 19, 23, 0.05)',
                 drawBorder: false,
             },
             ticks: {
-                color: '#B7BFD9',
+                color: '#45474D',
                 font: { size: 12, family: 'Google Sans Flex' },
                 padding: 10,
             },
